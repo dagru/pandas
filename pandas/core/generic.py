@@ -3557,7 +3557,7 @@ class NDFrame(PandasObject):
 
     def resample(self, rule, how=None, axis=0, fill_method=None, closed=None,
                  label=None, convention='start', kind=None, loffset=None,
-                 limit=None, base=0):
+                 limit=None, base=0, was_closed=None):
         """
         Convenience method for frequency conversion and resampling of regular
         time-series data.
@@ -3578,6 +3578,11 @@ class NDFrame(PandasObject):
             For frequencies that evenly subdivide 1 day, the "origin" of the
             aggregated intervals. For example, for '5min' frequency, base could
             range from 0 through 4. Defaults to 0
+        was_closed: boolean
+            Interprets the given time-series as sampling points of a left-closed right-open interval (or vice 
+            versa, if closed=='right'). Resamples up to (but excluding) the assumed end-point of the open side of the interval.
+            
+            .. versionadded:: 0.18.0
 
 
         Examples
@@ -3676,7 +3681,36 @@ class NDFrame(PandasObject):
         2000-01-01 00:03:00    17
         2000-01-01 00:06:00    26
         Freq: 3T, dtype: int64
-
+        
+        Use was_closed to resample up to (excluding) the next sampling point
+        
+        >>> series.resample("15s").pad()[24:]
+        2000-01-01 00:06:00    6
+        2000-01-01 00:06:15    6
+        2000-01-01 00:06:30    6
+        2000-01-01 00:06:45    6
+        2000-01-01 00:07:00    7
+        2000-01-01 00:07:15    7
+        2000-01-01 00:07:30    7
+        2000-01-01 00:07:45    7
+        2000-01-01 00:08:00    8
+        Freq: 15S, dtype: int64
+        
+        >>> series.resample("15s", was_closed=True).pad()[24:]
+        2000-01-01 00:06:00    6
+        2000-01-01 00:06:15    6
+        2000-01-01 00:06:30    6
+        2000-01-01 00:06:45    6
+        2000-01-01 00:07:00    7
+        2000-01-01 00:07:15    7
+        2000-01-01 00:07:30    7
+        2000-01-01 00:07:45    7
+        2000-01-01 00:08:00    8
+        2000-01-01 00:08:15    8
+        2000-01-01 00:08:30    8
+        2000-01-01 00:08:45    8
+        Freq: 15S, dtype: int64
+        
         """
         from pandas.tseries.resample import resample
 
@@ -3684,7 +3718,7 @@ class NDFrame(PandasObject):
         r = resample(self, freq=rule, label=label, closed=closed,
                      axis=axis, kind=kind, loffset=loffset,
                      fill_method=fill_method, convention=convention,
-                     limit=limit, base=base)
+                     limit=limit, base=base, was_closed=was_closed)
 
         # deprecation warnings
         # but call methods anyhow

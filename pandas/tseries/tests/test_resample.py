@@ -1548,6 +1548,24 @@ class TestResample(tm.TestCase):
                                        freq='D', tz='Europe/Paris')),
             'D Frequency')
 
+    def test_wasclosed(self):
+        df = pd.Series(1, index=pd.date_range(
+            "2015-01-01 00:00:00", "2015-01-01 02:00:00", freq="1h"))
+        tests = [17, 30, 55, 60, 77, 120, 127, 243]
+        expected_periods = [(60 % i > 0) + 180 // i for i in tests]
+        expected_freqs = ["%imin" % i for i in tests]
+
+        for i in range(len(tests)):
+            goal_left = pd.date_range(
+                start="2015-01-01 00:00:00", freq=expected_freqs[i], periods=expected_periods[i])
+            goal_right = pd.DatetimeIndex(
+                end="2015-01-01 02:00:00", freq=expected_freqs[i], periods=expected_periods[i])
+            resampled_left = df.resample(
+                expected_freqs[i], closed="left", was_closed=True).ffill().index
+            resampled_right = df.resample(
+                expected_freqs[i], closed="right", was_closed=True).ffill().index
+            tm.assert_index_equal(resampled_left, goal_left)
+            tm.assert_index_equal(resampled_right, goal_right)
 
 def _simple_ts(start, end, freq='D'):
     rng = date_range(start, end, freq=freq)

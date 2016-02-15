@@ -48,7 +48,7 @@ class Resampler(_GroupBy):
 
     # to the groupby descriptor
     _attributes = ['freq', 'axis', 'closed', 'label', 'convention',
-                   'loffset', 'base', 'kind']
+                   'loffset', 'base', 'kind', 'was_closed']
 
     # API compat of allowed attributes
     _deprecated_valids = _attributes + ['_ipython_display_', '__doc__',
@@ -721,7 +721,8 @@ class TimeGrouper(Grouper):
     def __init__(self, freq='Min', closed=None, label=None, how='mean',
                  nperiods=None, axis=0,
                  fill_method=None, limit=None, loffset=None, kind=None,
-                 convention=None, base=0, **kwargs):
+                 convention=None, base=0,
+                 was_closed=None, **kwargs):
         freq = to_offset(freq)
 
         end_types = set(['M', 'A', 'Q', 'BM', 'BA', 'BQ', 'W'])
@@ -751,6 +752,8 @@ class TimeGrouper(Grouper):
         self.fill_method = fill_method
         self.limit = limit
         self.base = base
+
+        self.was_closed = was_closed
 
         # always sort time groupers
         kwargs['sort'] = True
@@ -852,7 +855,8 @@ class TimeGrouper(Grouper):
         first, last = ax.min(), ax.max()
         first, last = _get_range_edges(first, last, self.freq,
                                        closed=self.closed,
-                                       base=self.base)
+                                       base=self.base,
+                                       was_closed=self.was_closed, was_freq=ax.freq)
         tz = ax.tz
         binner = labels = DatetimeIndex(freq=self.freq,
                                         start=first.replace(tzinfo=None),
@@ -978,7 +982,32 @@ def _take_new_index(obj, indexer, new_index, axis=0):
         raise ValueError("'obj' should be either a Series or a DataFrame")
 
 
-def _get_range_edges(first, last, offset, closed='left', base=0):
+def _get_range_edges(first, last, offset, closed='left', base=0,
+                     was_closed=False, was_freq=None):
+
+    if was_closed is True:
+      if not was_freq:
+        raise ValueError("was_closed requires equidstant index.")
+
+      virt_first = first - (closed == 'right') * was_freq
+      virt_last = last + (closed == 'left') * was_freq
+
+      diff_nano = (virt_last - virt_first).value
+
+      if closed == "left":
+          tmp_first = virt_first
+          tmp_last = virt_last
+          if diff_nano % offset.nanos > 0:
+              tmp_last = tmp_last + offset
+      else:
+          periods = (virt_last.value - virt_first.value) // offset.nanos
+          if diff_nano % offset.nanos > 0:
+              periods += 1
+          tmp_first = virt_last - periods * offset
+          tmp_last = virt_last
+
+      return tmp_first, tmp_last
+
     if isinstance(offset, compat.string_types):
         offset = to_offset(offset)
 
@@ -1000,7 +1029,6 @@ def _get_range_edges(first, last, offset, closed='left', base=0):
         first = Timestamp(offset.rollback(first))
     else:
         first = Timestamp(first - offset)
-
     last = Timestamp(last + offset)
 
     return first, last
